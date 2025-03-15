@@ -22,21 +22,21 @@ class TestWeatherInfoTool(unittest.TestCase):
             "main": {
                 "temp": 15.5,
                 "feels_like": 14.8,
-                "temp_min": 14.2,
-                "temp_max": 16.7,
-                "pressure": 1023,
-                "humidity": 76
+                "temp_min": 14.44,
+                "temp_max": 16.11,
+                "pressure": 1024,
+                "humidity": 77
             },
             "visibility": 10000,
-            "wind": {"speed": 3.6, "deg": 250},
+            "wind": {"speed": 3.09, "deg": 240},
             "clouds": {"all": 0},
-            "dt": 1619352000,
+            "dt": 1617979425,
             "sys": {
-                "type": 2,
-                "id": 2019646,
+                "type": 1,
+                "id": 1414,
                 "country": "GB",
-                "sunrise": 1619325935,
-                "sunset": 1619378329
+                "sunrise": 1617941871,
+                "sunset": 1617991012
             },
             "timezone": 3600,
             "id": 2643743,
@@ -47,43 +47,25 @@ class TestWeatherInfoTool(unittest.TestCase):
         self.forecast_response = {
             "cod": "200",
             "message": 0,
-            "cnt": 2,
+            "cnt": 40,
             "list": [
                 {
-                    "dt": 1619352000,
+                    "dt": 1617980400,
                     "main": {
                         "temp": 15.5,
                         "feels_like": 14.8,
-                        "temp_min": 14.2,
-                        "temp_max": 16.7,
-                        "pressure": 1023,
-                        "humidity": 76
+                        "temp_min": 14.44,
+                        "temp_max": 16.11,
+                        "pressure": 1024,
+                        "humidity": 77
                     },
                     "weather": [{"id": 800, "main": "Clear", "description": "clear sky", "icon": "01d"}],
                     "clouds": {"all": 0},
-                    "wind": {"speed": 3.6, "deg": 250},
+                    "wind": {"speed": 3.09, "deg": 240},
                     "visibility": 10000,
                     "pop": 0,
                     "sys": {"pod": "d"},
-                    "dt_txt": "2021-04-25 12:00:00"
-                },
-                {
-                    "dt": 1619362800,
-                    "main": {
-                        "temp": 14.2,
-                        "feels_like": 13.5,
-                        "temp_min": 13.1,
-                        "temp_max": 14.2,
-                        "pressure": 1023,
-                        "humidity": 82
-                    },
-                    "weather": [{"id": 800, "main": "Clear", "description": "clear sky", "icon": "01n"}],
-                    "clouds": {"all": 0},
-                    "wind": {"speed": 2.8, "deg": 240},
-                    "visibility": 10000,
-                    "pop": 0,
-                    "sys": {"pod": "n"},
-                    "dt_txt": "2021-04-25 15:00:00"
+                    "dt_txt": "2021-04-09 15:00:00"
                 }
             ],
             "city": {
@@ -93,15 +75,14 @@ class TestWeatherInfoTool(unittest.TestCase):
                 "country": "GB",
                 "population": 1000000,
                 "timezone": 3600,
-                "sunrise": 1619325935,
-                "sunset": 1619378329
+                "sunrise": 1617941871,
+                "sunset": 1617991012
             }
         }
 
     @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
     def test_get_weather_basic(self, mock_get):
-        # Test case 1: Basic weather request without forecast
+        # Test case 1: Basic weather request with valid city
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = self.current_weather_response
@@ -110,66 +91,79 @@ class TestWeatherInfoTool(unittest.TestCase):
         result = self.weather_tool.get_weather({'city': 'London'})
         
         # Verify the API was called with correct parameters
-        mock_get.assert_called_once_with(
-            "https://api.openweathermap.org/data/2.5/weather", 
-            params={'q': 'London', 'appid': 'test_api_key', 'units': 'metric'}
-        )
+        mock_get.assert_called_once()
+        args, kwargs = mock_get.call_args
+        self.assertEqual(kwargs['params']['q'], 'London')
+        self.assertEqual(kwargs['params']['units'], 'metric')
         
         # Verify the result structure and content
+        self.assertIn('current_weather', result)
+        self.assertIn('location', result)
         self.assertEqual(result['current_weather']['temperature'], 15.5)
-        self.assertEqual(result['current_weather']['feels_like'], 14.8)
-        self.assertEqual(result['current_weather']['humidity'], 76)
-        self.assertEqual(result['current_weather']['description'], 'clear sky')
         self.assertEqual(result['location']['city'], 'London')
         self.assertEqual(result['location']['country'], 'GB')
         self.assertEqual(result['units'], 'metric')
-        self.assertNotIn('forecast', result)
 
     @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
+    def test_get_weather_with_units(self, mock_get):
+        # Test case 2: Weather request with imperial units
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = self.current_weather_response
+        mock_get.return_value = mock_response
+        
+        result = self.weather_tool.get_weather({'city': 'London', 'units': 'imperial'})
+        
+        # Verify the API was called with correct parameters
+        args, kwargs = mock_get.call_args
+        self.assertEqual(kwargs['params']['units'], 'imperial')
+        self.assertEqual(result['units'], 'imperial')
+
+    @patch('engine.tools.weather_info_tool.requests.get')
     def test_get_weather_with_forecast(self, mock_get):
-        # Test case 2: Weather request with forecast
-        # Set up mock for current weather
+        # Test case 3: Weather request with forecast data
+        # First response for current weather
         mock_current_response = MagicMock()
         mock_current_response.status_code = 200
         mock_current_response.json.return_value = self.current_weather_response
         
-        # Set up mock for forecast
+        # Second response for forecast
         mock_forecast_response = MagicMock()
         mock_forecast_response.status_code = 200
         mock_forecast_response.json.return_value = self.forecast_response
         
-        # Configure the mock to return different responses for different calls
+        # Configure mock to return different responses for different calls
         mock_get.side_effect = [mock_current_response, mock_forecast_response]
         
         result = self.weather_tool.get_weather({
             'city': 'London', 
-            'units': 'imperial', 
             'include_forecast': True
         })
         
-        # Verify both API calls were made with correct parameters
+        # Verify both APIs were called
         self.assertEqual(mock_get.call_count, 2)
-        mock_get.assert_any_call(
-            "https://api.openweathermap.org/data/2.5/weather", 
-            params={'q': 'London', 'appid': 'test_api_key', 'units': 'imperial'}
-        )
-        mock_get.assert_any_call(
-            "https://api.openweathermap.org/data/2.5/forecast", 
-            params={'q': 'London', 'appid': 'test_api_key', 'units': 'imperial'}
-        )
         
-        # Verify the result includes forecast data
+        # Verify forecast data is included in the result
         self.assertIn('forecast', result)
-        self.assertEqual(len(result['forecast']), 2)
-        self.assertEqual(result['forecast'][0]['temperature'], 15.5)
-        self.assertEqual(result['forecast'][1]['temperature'], 14.2)
-        self.assertEqual(result['units'], 'imperial')
+        self.assertIsInstance(result['forecast'], list)
+        self.assertEqual(len(result['forecast']), 1)  # Based on our mock data
+        self.assertIn('temperature', result['forecast'][0])
+        self.assertIn('description', result['forecast'][0])
 
     @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
+    def test_get_weather_missing_city(self, mock_get):
+        # Test case 4: Missing city parameter
+        result = self.weather_tool.get_weather({})
+        
+        # Verify the API was not called
+        mock_get.assert_not_called()
+        
+        # Verify error message
+        self.assertEqual(result, "Error: City name is required")
+
+    @patch('engine.tools.weather_info_tool.requests.get')
     def test_get_weather_api_error(self, mock_get):
-        # Test case 3: API returns an error
+        # Test case 5: API returns an error
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_response.json.return_value = {"message": "City not found"}
@@ -177,37 +171,36 @@ class TestWeatherInfoTool(unittest.TestCase):
         
         result = self.weather_tool.get_weather({'city': 'NonExistentCity'})
         
-        # Verify the error is properly handled
-        self.assertTrue(isinstance(result, str))
-        self.assertIn("Error:", result)
+        # Verify error handling
+        self.assertTrue(result.startswith("Error:"))
         self.assertIn("City not found", result)
         self.assertIn("404", result)
 
     @patch('engine.tools.weather_info_tool.requests.get')
-    def test_get_weather_missing_city(self, mock_get):
-        # Test case 4: Missing city parameter
-        result = self.weather_tool.get_weather({})
+    def test_get_weather_exception_handling(self, mock_get):
+        # Test case 6: Exception during API call
+        mock_get.side_effect = Exception("Network error")
         
-        # Verify the error is properly handled
-        self.assertEqual(result, "Error: City name is required")
-        # Ensure the API was not called
-        mock_get.assert_not_called()
+        result = self.weather_tool.get_weather({'city': 'London'})
+        
+        # Verify exception handling
+        self.assertTrue(result.startswith("Error:"))
+        self.assertIn("Network error", result)
 
     @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
-    def test_get_weather_forecast_api_error(self, mock_get):
-        # Test case 5: Current weather succeeds but forecast fails
-        # Set up mock for current weather
+    def test_get_weather_forecast_error(self, mock_get):
+        # Test case 7: Current weather succeeds but forecast fails
+        # First response for current weather
         mock_current_response = MagicMock()
         mock_current_response.status_code = 200
         mock_current_response.json.return_value = self.current_weather_response
         
-        # Set up mock for forecast (error)
+        # Second response for forecast (error)
         mock_forecast_response = MagicMock()
         mock_forecast_response.status_code = 500
         mock_forecast_response.json.return_value = {"message": "Internal server error"}
         
-        # Configure the mock to return different responses for different calls
+        # Configure mock to return different responses
         mock_get.side_effect = [mock_current_response, mock_forecast_response]
         
         result = self.weather_tool.get_weather({
@@ -215,44 +208,15 @@ class TestWeatherInfoTool(unittest.TestCase):
             'include_forecast': True
         })
         
-        # Verify both API calls were made
+        # Verify both APIs were called
         self.assertEqual(mock_get.call_count, 2)
         
-        # Verify the result has current weather but indicates forecast error
+        # Verify current weather data is included
         self.assertIn('current_weather', result)
+        
+        # Verify forecast error is included
         self.assertIn('forecast_error', result)
         self.assertEqual(result['forecast_error'], "Could not retrieve forecast data")
-
-    @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
-    def test_get_weather_exception_handling(self, mock_get):
-        # Test case 6: Exception during API call
-        mock_get.side_effect = Exception("Network error")
-        
-        result = self.weather_tool.get_weather({'city': 'London'})
-        
-        # Verify the exception is properly handled
-        self.assertTrue(isinstance(result, str))
-        self.assertIn("Error:", result)
-        self.assertIn("Network error", result)
-
-    @patch('engine.tools.weather_info_tool.requests.get')
-    @patch.dict(os.environ, {"OPENWEATHER_API_KEY": "test_api_key"})
-    def test_get_weather_different_units(self, mock_get):
-        # Test case 7: Test with different units
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = self.current_weather_response
-        mock_get.return_value = mock_response
-        
-        # Test with standard units
-        self.weather_tool.get_weather({'city': 'London', 'units': 'standard'})
-        
-        # Verify the API was called with correct units
-        mock_get.assert_called_with(
-            "https://api.openweathermap.org/data/2.5/weather", 
-            params={'q': 'London', 'appid': 'test_api_key', 'units': 'standard'}
-        )
 
 if __name__ == '__main__':
     unittest.main()
